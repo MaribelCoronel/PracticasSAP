@@ -1,0 +1,243 @@
+_schema-version: "3.1"
+ID: RiskManagementt
+description: A simple CAP project.
+version: 1.0.0
+modules:
+- name: RiskManagementt-RiskManagementt.Risks
+  type: html5
+  path: app/RiskManagementt.Risks
+  build-parameters:
+    _artifactName: RiskManagementtRisks.zip
+    build-result: dist-zip
+    builder: custom
+    commands:
+    - rm -rf dist-zip dist
+    - npx -p @ui5/cli@^3.0.0 ui5 build --dest dist --include-task=generateManifestBundle
+      --include-task=generateCachebusterInfo
+    - mkdir dist-zip
+    - bash -c "cd dist && npx bestzip ../dist-zip/RiskManagementtRisks.zip *"
+    supported-platforms: []
+- name: RiskManagementt-db-deployer
+  type: hdb
+  path: gen/db
+  requires:
+  - name: RiskManagementt-service-uaa
+  - name: RiskManagementt-service-db
+  parameters:
+    buildpack: nodejs_buildpack
+  build-parameters:
+    builder: npm
+    ignore:
+    - node_modules
+    - package-lock.json
+- name: RiskManagementt-srv
+  type: nodejs
+  path: gen/srv
+  requires:
+  - name: RiskManagementt-service-uaa
+  - name: RiskManagementt-service-db
+  - name: RiskManagementt-service-destination
+  - name: RiskManagementt-service-metadata
+  - name: RiskManagementt-service-connectivity
+  - name: RiskManagementt-service-logs
+  provides:
+  - name: srv-api
+    properties:
+      srv-url: ${default-url}
+  parameters:
+    memory: 256MB
+  build-parameters:
+    builder: npm
+    ignore:
+    - node_modules
+    - package-lock.json
+- name: RiskManagementt-aux-destinations
+  type: com.sap.application.content
+  requires:
+  - name: RiskManagementt-service-uaa
+    parameters:
+      service-key:
+        name: RiskManagementt-uaa-key
+  - name: srv-api
+  - name: RiskManagementt-service-html5-apps-repo-host
+    parameters:
+      service-key:
+        name: RiskManagementt-html5-apps-repo-host-key
+  - name: RiskManagementt-service-destination
+    parameters:
+      content-target: true
+  parameters:
+    content:
+      subaccount:
+        destinations:
+        - Authentication: OAuth2UserTokenExchange
+          Name: RiskManagementt-service-uaa
+          ServiceInstanceName: RiskManagementt-uaa
+          ServiceKeyName: RiskManagementt-uaa-key
+          sap.cloud.service: lcap.RiskManagementt
+        - Authentication: OAuth2UserTokenExchange
+          Name: RiskManagementt-app-srv
+          TokenServiceInstanceName: RiskManagementt-uaa
+          TokenServiceKeyName: RiskManagementt-uaa-key
+          URL: ~{srv-api/srv-url}
+          sap.cloud.service: lcap.RiskManagementt
+        - Name: RiskManagementt-service-html5-apps-repo-host
+          ServiceInstanceName: RiskManagementt-html5-apps-repo-host
+          ServiceKeyName: RiskManagementt-html5-apps-repo-host-key
+          sap.cloud.service: lcap.RiskManagementt
+        - AppgyverEnabled: false
+          Authentication: OAuth2UserTokenExchange
+          HTML5.DynamicDestination: false
+          MobileEnabled: false
+          Name: RiskManagementt-RiskManagementtService
+          TokenServiceInstanceName: RiskManagementt-uaa
+          TokenServiceKeyName: RiskManagementt-uaa-key
+          URL: ~{srv-api/srv-url}/service/RiskManagementt
+          WebIDEEnabled: false
+          sap.applicationdevelopment.actions.enabled: false
+          sap.build.usage: CAP
+          sap.cloud.service: lcap.RiskManagementt
+          sap.processautomation.enabled: false
+        existing_destinations_policy: update
+  build-parameters:
+    no-source: true
+- name: RiskManagementt-launchpad
+  type: html5
+  path: build/launchpad
+  build-parameters:
+    _artifactName: launchpad.zip
+    build-result: ../../build/dist
+    builder: custom
+    commands:
+    - npm install
+    - npx -p @ui5/cli@^3.0.0 ui5 build --dest dist --include-task=generateManifestBundle
+      --include-task=generateCachebusterInfo
+    - bash -c "cd dist && npx bestzip ../../../build/dist/launchpad.zip *"
+    - rm -rf dist
+    supported-platforms: []
+- name: RiskManagementt-aux-ui-deployer
+  type: com.sap.application.content
+  path: build/ui-deployer
+  requires:
+  - name: RiskManagementt-service-html5-apps-repo-host
+    parameters:
+      content-target: true
+  build-parameters:
+    build-result: resources
+    requires:
+    - artifacts:
+      - RiskManagementtRisks.zip
+      name: RiskManagementt-RiskManagementt.Risks
+      target-path: resources
+    - artifacts:
+      - launchpad.zip
+      name: RiskManagementt-launchpad
+      target-path: resources
+    - artifacts:
+      - RiskManagementtRisks.zip
+      name: RiskManagementtRisks
+      target-path: resources/
+- name: RiskManagementtRisks
+  type: html5
+  path: app/RiskManagementt.Risks
+  build-parameters:
+    build-result: dist
+    builder: custom
+    commands:
+    - npm install
+    - npm run build:cf
+    supported-platforms: []
+resources:
+- name: RiskManagementt-service-uaa
+  type: org.cloudfoundry.managed-service
+  parameters:
+    config:
+      oauth2-configuration:
+        redirect-uris:
+        - https://*.${default-domain}/login/*
+      role-collections:
+      - description: ""
+        name: RiskManagementt-RiskViewer-${space}
+        role-template-references:
+        - $XSAPPNAME.RiskViewer
+      - description: ""
+        name: RiskManagementt-RiskManager-${space}
+        role-template-references:
+        - $XSAPPNAME.RiskManager
+      xsappname: RiskManagementt-${space}
+    path: xs-security.json
+    service: xsuaa
+    service-name: RiskManagementt-uaa
+    service-plan: application
+- name: RiskManagementt-service-db
+  type: org.cloudfoundry.managed-service
+  parameters:
+    service: hana
+    service-name: RiskManagementt-db
+    service-plan: hdi-shared
+- name: RiskManagementt-service-destination
+  type: org.cloudfoundry.managed-service
+  parameters:
+    config:
+      HTML5Runtime_enabled: true
+      init_data:
+        instance:
+          destinations:
+          - Authentication: NoAuthentication
+            Name: ui5
+            ProxyType: Internet
+            Type: HTTP
+            URL: https://ui5.sap.com
+          existing_destinations_policy: update
+      version: 1.0.0
+    service: destination
+    service-name: RiskManagementt-destination
+    service-plan: lite
+- name: RiskManagementt-service-metadata
+  type: org.cloudfoundry.user-provided-service
+  parameters:
+    config:
+      default-domain: ${default-domain}
+    service: metadata
+    service-name: RiskManagementt-metadata
+    service-plan: standard
+- name: RiskManagementt-service-connectivity
+  type: org.cloudfoundry.managed-service
+  parameters:
+    service: connectivity
+    service-name: RiskManagementt-connectivity
+    service-plan: lite
+- name: RiskManagementt-service-logs
+  type: org.cloudfoundry.managed-service
+  parameters:
+    service: application-logs
+    service-name: RiskManagementt-logs
+    service-plan: lite
+- name: RiskManagementt-service-html5-apps-repo-host
+  type: org.cloudfoundry.managed-service
+  parameters:
+    service: html5-apps-repo
+    service-name: RiskManagementt-html5-apps-repo-host
+    service-plan: app-host
+parameters:
+  deploy_mode: html5-repo
+  enable-parallel-deployments: true
+build-parameters:
+  before-all:
+  - builder: custom
+    commands:
+    - rm -rf build/dist
+    - mkdir -p build/dist
+    - rm -rf build/ui-deployer
+    - mkdir -p build/ui-deployer
+  - builder: custom
+    commands:
+    - npm install --production
+    - bash -c "cds -v | grep 'cds-dk' || npm i --production --no-save @sap/cds-dk
+      @sap/mdk-tools"
+    - bash -c "export PATH=$PATH:$(pwd)/node_modules/.bin"
+    - cds build --production
+  after-all:
+  - builder: custom
+    commands:
+    - npm install

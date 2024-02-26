@@ -13,5 +13,7 @@
         "*.properties": "default",
         "*.fragment": "default"
     },
-    "wattFeature.hanaTools.useLocalConnection": true
+    "wattFeature.hanaTools.useLocalConnection": true,
+    "files.autoSave": "off",
+    "ContinuousIntegrationAndDelivery.sourceLocationTracking": true
 }
